@@ -158,10 +158,10 @@ body:not(.editor) #groupName{background:#e9eef2;color:#344b5c;border-color:#6478
 </main>
 <div id="authPanel" role="dialog" aria-modal="true" aria-labelledby="authTitle">
  <div class="auth-card">
-  <h2 id="authTitle">Acesso de colaborador</h2>
-  <p>Informe seu e-mail autorizado. Enviaremos um link de acesso para confirmar sua identidade. Visitantes não precisam entrar para consultar o mapa.</p>
-  <input id="authEmail" type="email" placeholder="seu@email.com" autocomplete="email">
-  <div class="auth-actions"><button class="gold" id="sendMagicLink" type="button">Enviar link de acesso</button><button class="light" id="closeAuth" type="button">Cancelar</button></div>
+  <h2 id="authTitle">Liberar edição</h2>
+  <p>Digite a senha da tropa para liberar as alterações no mapa. A visualização continua aberta para todos.</p>
+  <input id="editPassword" type="password" placeholder="Senha de edição" autocomplete="current-password">
+  <div class="auth-actions"><button class="gold" id="unlockEditing" type="button">Liberar edição</button><button class="light" id="closeAuth" type="button">Cancelar</button></div>
   <div id="authMessage" aria-live="polite"></div>
  </div>
 </div>
@@ -211,8 +211,8 @@ let state={};
 const SUPABASE_URL="https://ztlgllwjvfewdjlyyitv.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY="sb_publishable_uSUZ3gMVXwokEb2qx9aiCg_-KO9CVYz";
 const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
-let canEdit=false, dataReady=false, lastUpdatedAt=null, currentUser=null, saving=false, saveRequested=false;
-const SITE_URL="https://chefeduduis.github.io/Progress-o-Tropa-Senior-Ywy-Mara-Ey/";
+let canEdit=false, dataReady=false, lastUpdatedAt=null, saving=false, saveRequested=false;
+const EDIT_PASSWORD="Ywy43";
 function accessMessage(msg){const el=document.getElementById("accessStatus");if(el)el.textContent=msg;}
 function setEditorMode(enabled){canEdit=!!enabled;document.body.classList.toggle("editor",canEdit);document.getElementById("groupName").readOnly=!canEdit;document.getElementById("authButton").textContent=canEdit?"Sair da edição":"Entrar para editar";accessMessage(canEdit?"Colaborador autorizado":"Visualização pública");render();}
 async function refreshFromCloud(showError=true){
@@ -225,35 +225,31 @@ async function refreshFromCloud(showError=true){
  lastUpdatedAt=data.updated_at;dataReady=true;populateYouthFilter("all");render();
  return true;
 }
-async function verifyEditor(session){
- currentUser=session?.user||null;
- if(!currentUser){setEditorMode(false);return;}
- const {data,error}=await db.rpc("is_mapa_senior_editor");
- if(error){console.error("Editor check:",error);setEditorMode(false);accessMessage("Conta sem autorização");return;}
- setEditorMode(data===true);
-}
 async function initializeCloud(){
  accessMessage("Conectando ao banco…");
- const {data:{session}}=await db.auth.getSession();
- await verifyEditor(session);
  await refreshFromCloud();
  if(!dataReady){document.getElementById("board").innerHTML='<div class="empty">Não foi possível carregar o mapa compartilhado. Atualize a página ou tente novamente.</div>';return;}
- accessMessage(canEdit?"Colaborador autorizado":"Visualização pública");
+ accessMessage("Visualização pública");
  setInterval(()=>refreshFromCloud(false),10000);
 }
-db.auth.onAuthStateChange((_event,session)=>{setTimeout(async()=>{await verifyEditor(session);await refreshFromCloud(false);},0);});
-document.getElementById("authButton").addEventListener("click",async()=>{
- if(canEdit){await db.auth.signOut();setEditorMode(false);return;}
- document.getElementById("authMessage").textContent="";document.getElementById("authPanel").classList.add("open");
+document.getElementById("authButton").addEventListener("click",()=>{
+ if(canEdit){setEditorMode(false);return;}
+ document.getElementById("authMessage").textContent="";
+ document.getElementById("editPassword").value="";
+ document.getElementById("authPanel").classList.add("open");
+ document.getElementById("editPassword").focus();
 });
 document.getElementById("closeAuth").addEventListener("click",()=>document.getElementById("authPanel").classList.remove("open"));
-document.getElementById("sendMagicLink").addEventListener("click",async()=>{
- const email=document.getElementById("authEmail").value.trim();const msg=document.getElementById("authMessage");
- if(!email){msg.textContent="Informe seu e-mail.";return;}
- msg.textContent="Enviando link…";
- const {error}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:SITE_URL,shouldCreateUser:false}});
- msg.textContent=error?"Não foi possível enviar: "+error.message:"Link enviado! Confira sua caixa de entrada e a pasta de spam.";
-});
+function unlockEditing(){
+ const entered=document.getElementById("editPassword").value;
+ const msg=document.getElementById("authMessage");
+ if(entered===EDIT_PASSWORD){
+  document.getElementById("authPanel").classList.remove("open");
+  setEditorMode(true);
+ }else{msg.textContent="Senha incorreta. Tente novamente.";document.getElementById("editPassword").select();}
+}
+document.getElementById("unlockEditing").addEventListener("click",unlockEditing);
+document.getElementById("editPassword").addEventListener("keydown",e=>{if(e.key==="Enter")unlockEditing();});
 function variableItems(b){
  const found=(b.varText||"").split(/\r?\n/).map(x=>x.trim()).filter(x=>/^\*\s*/.test(x)).map(x=>x.replace(/^\*\s*/,""));
  while(found.length < (Number(b.varCount)||0)) found.push(`Atividade variável ${found.length+1} (descrever conforme o guia de progressão)`);
